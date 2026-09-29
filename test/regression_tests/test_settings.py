@@ -1805,3 +1805,68 @@ def test_post_adiabatic_settings(get_exit_stack):
 
         for current_mock in all_mocks:
             current_mock.reset_mock()
+
+
+@pytest.mark.parametrize("conditioning", [1, 2])
+def test_generate_fd_polarizations_long_signal_with_deltaF_0(
+    basic_settings, conditioning
+):
+    """Checks the duration adjustment of generate_fd_polarizations when deltaF=0."""
+
+    # addresses an overflow issue with numpy 2.x when running through
+    # "np.ldexp(1, np.int32)"
+
+    # 2**15 + 1 samples: chirplen is rounded up to 2**16
+    td_length = 2**15 + 1
+    expected_chirplen = 2**16
+
+    def make_td_polarizations(self):
+        hp = lal.CreateREAL8TimeSeries(
+            "H_PLUS",
+            -1.0,
+            0.0,
+            self.parameters["deltaT"],
+            lal.DimensionlessUnit,
+            td_length,
+        )
+        hc = lal.CreateREAL8TimeSeries(
+            "H_CROSS",
+            -1.0,
+            0.0,
+            self.parameters["deltaT"],
+            lal.DimensionlessUnit,
+            td_length,
+        )
+        hp.data.data[:] = np.sin(np.arange(td_length) * 1e-2)
+        hc.data.data[:] = np.cos(np.arange(td_length) * 1e-2)
+        return hp, hc
+
+    with mock.patch.object(
+        pyseobnr.generate_waveform.GenerateWaveform,
+        "generate_td_polarizations_conditioned_1",
+        autospec=True,
+    ) as p_generate_td_polarizations_conditioned_1, mock.patch.object(
+        pyseobnr.generate_waveform.GenerateWaveform,
+        "generate_td_polarizations_conditioned_2",
+        autospec=True,
+    ) as p_generate_td_polarizations_conditioned_2:
+        p_generate_td_polarizations_conditioned_1.side_effect = make_td_polarizations
+        p_generate_td_polarizations_conditioned_2.side_effect = make_td_polarizations
+
+        wfm_gen = GenerateWaveform(
+            basic_settings | {"deltaF": 0.0, "conditioning": conditioning}
+        )
+        hptilde, hctilde = wfm_gen.generate_fd_polarizations()
+
+        if conditioning == 1:
+            p_generate_td_polarizations_conditioned_1.assert_called_once()
+            p_generate_td_polarizations_conditioned_2.assert_not_called()
+        else:
+            p_generate_td_polarizations_conditioned_1.assert_not_called()
+            p_generate_td_polarizations_conditioned_2.assert_called_once()
+
+    deltaT = basic_settings["deltaT"]
+    assert wfm_gen.parameters["deltaF"] == 1.0 / (expected_chirplen * deltaT)
+    for htilde in (hptilde, hctilde):
+        assert htilde.data.length == expected_chirplen // 2 + 1
+        assert htilde.deltaF == 1.0 / (expected_chirplen * deltaT)
