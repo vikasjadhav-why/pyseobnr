@@ -1622,7 +1622,7 @@ class GenerateWaveform:
         if deltaF == 0:
             chirplen = hp.data.length
             chirplen_exp = np.frexp(chirplen)
-            chirplen = int(np.ldexp(1, chirplen_exp[1]))
+            chirplen = int(np.ldexp(1, int(chirplen_exp[1])))
             deltaF = 1.0 / (chirplen * deltaT)
             self.parameters["deltaF"] = deltaF
 
