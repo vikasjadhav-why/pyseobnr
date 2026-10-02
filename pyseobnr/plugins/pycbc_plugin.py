@@ -98,8 +98,7 @@ class PySEOBNRv5PyCBCPlugin:
         waveform = GenerateWaveform(p)
         times, modes = waveform.generate_td_modes()
         
-        #Build the pycbc time series for each mode
-        ## Dictionary has keys (l,m) and value - (hlm_plus, -hlm_cross)
+        # Build the PyCBC TimeSeries for each mode
         hlms = {}
 
         for lm in modes:
