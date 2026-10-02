@@ -4,6 +4,7 @@ from pycbc.types import FrequencySeries, TimeSeries
 
 from pyseobnr.generate_waveform import GenerateWaveform
 
+import lal
 
 class PySEOBNRv5PyCBCPlugin:
     approximant = None
@@ -74,6 +75,44 @@ class PySEOBNRv5PyCBCPlugin:
         hc = FrequencySeries(hc.data.data[:], delta_f=hc.deltaF, epoch=hp.epoch)
 
         return hp, hc
+
+
+    @classmethod
+    def gen_td_modes(cls, **p):
+        assert cls.approximant is not None
+        
+        # Some waveform input parameters from PyCBC have the same naming
+        # conventions as PySEOBNR, thus they can be directly inherited.
+        # We only update the settings used uniquely by PySEOBNR
+        p = p.copy()
+        p.update(
+            {
+                "approximant": cls.approximant,
+                "phi_ref": p.pop("coa_phase"),  # reference phase needed by SEOBNRv5
+                "f22_start": p.pop("f_lower"),  # starting frequency
+                "deltaT": p.pop("delta_t"),
+            }
+        )
+        p = cls._cleanup_parameters(p)
+
+        waveform = GenerateWaveform(p)
+        times, modes = waveform.generate_td_modes()
+        
+        #Build the pycbc time series for each mode
+        ## Dictionary has keys (l,m) and value - (hlm_plus, -hlm_cross)
+        hlms = {}
+
+        for lm in modes:
+            ulm, vlm = modes[lm].real, modes[lm].imag
+            ulm_astimeseries = TimeSeries(ulm,
+                                           delta_t=times[1]-times[0],
+                                           epoch=lal.LIGOTimeGPS(times[0]))
+            vlm_astimeseries = TimeSeries(vlm,
+                                          delta_t=times[1]-times[0],
+                                          epoch=lal.LIGOTimeGPS(times[0]))
+            hlms[lm] = (ulm_astimeseries,vlm_astimeseries)
+
+        return hlms
 
 
 class PySEOBNRv5PyCBCPlugin_v5EHM(PySEOBNRv5PyCBCPlugin):
